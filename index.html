@@ -507,6 +507,27 @@
         .cart-item-note-pill { font-size: 0.72rem; color: var(--accent); font-weight: 700; display: block; margin-top: 2px; }
         .remove-btn { color: #d32f2f; font-weight: 800; font-size: 0.78rem; cursor: pointer; }
 
+        /* كارت الهدايا المكتسبة في السلة */
+        .gift-card-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(46, 125, 50, 0.1);
+            border: 1.5px dashed #2e7d32;
+            border-radius: 16px;
+            margin-bottom: 10px;
+        }
+        .gift-badge {
+            background: #2e7d32;
+            color: white;
+            font-size: 0.72rem;
+            font-weight: 800;
+            padding: 3px 10px;
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+
         .order-type-container { display: flex; background: var(--tag-bg); padding: 6px; border-radius: 16px; margin: 15px 0; gap: 6px; border: 1px solid var(--card-border); }
         .order-type-btn { flex: 1; border: none; background: transparent; padding: 12px; border-radius: 12px; font-weight: 800; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--desc-text); transition: all 0.3s ease; }
         .order-type-btn.active { background: var(--accent); color: white; box-shadow: 0 4px 12px rgba(216, 43, 39, 0.25); }
@@ -564,10 +585,10 @@
         </div>
     </header>
 
-    <!-- بنر العرض الأسبوعي -->
+    <!-- بنر العرض -->
     <div style="display: flex; justify-content: center;">
         <div class="promo-banner">
-            🔥 عرض الأسبوع: خصم 25% على أي أوردر بقيمة 500 ج.م فما فوق (أيام السبت والأحد والإثنين)!
+            🍕 عرض البيتزا: اشتري أي 2 بيتزا واحصل على الثالثة هدية مجاناً (يشترط أن تكون من نفس الحجم)! 🔥
         </div>
     </div>
 
@@ -631,19 +652,9 @@
             
             <div id="earnedGiftsContainer"></div>
 
-            <div style="margin: 20px 0; padding: 15px; background: var(--tag-bg); border-radius: 18px; display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--card-border);">
-                <div style="display: flex; justify-content: space-between;">
-                    <span>المجموع قبل الخصم:</span>
-                    <b id="subTotalAmount">0 ج.م</b>
-                </div>
-                <div id="discountRow" style="display: none; justify-content: space-between; color: #2e7d32; font-weight: 800;">
-                    <span>🔥 خصم العرض (25%):</span>
-                    <span id="discountAmount">-0 ج.م</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 1.1rem; border-top: 1px dashed var(--card-border); padding-top: 8px;">
-                    <b>الإجمالي النهائي:</b>
-                    <b id="totalAmount" style="color: var(--orange-dark);">0 ج.م</b>
-                </div>
+            <div style="margin: 20px 0; padding: 15px; background: var(--tag-bg); border-radius: 18px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--card-border);">
+                <b style="font-size: 1.05rem;">الإجمالي:</b>
+                <b id="totalAmount" style="color: var(--orange-dark); font-size: 1.15rem;">0 ج.م</b>
             </div>
 
             <div class="order-type-container">
@@ -668,12 +679,10 @@
         const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQFMiFrq1Dw5y3MpXKKbVIdbxMUqb6UKkwHpL6_0IprzgSvfnKBY3_s0xRTdUUQGmSRgo8yId6gTQg0/pub?output=csv';
         const IMAGES_PATH = "./images/"; 
         let menuData = [], cart = [];
-        let subTotal = 0; 
-        let discountVal = 0;
-        let finalTotal = 0; 
+        let total = 0; 
+        let earnedPizzaGifts = [];
         let deferredPrompt;
         let selectedOrderType = 'delivery';
-        let discountApplied = false;
 
         function adjustStickyCatNav() {
             const header = document.getElementById('mainHeader');
@@ -948,7 +957,7 @@
 
         function addToCart(e, btn, name, img) {
             const card = btn.closest('.food-card') || btn.closest('.offer-card'); 
-            const size = card.dataset.size; 
+            const size = card.dataset.size || ''; 
             const price = card.dataset.price; 
             const category = card.dataset.category || '';
             
@@ -956,7 +965,7 @@
             const note = noteInput ? noteInput.value.trim() : '';
             
             let finalName = (size && size.trim() !== '') ? `${name} (${size})` : name; 
-            cart.push({name: finalName, rawName: name, size: size, price: price, img: img, category: category, note: note});
+            cart.push({name: finalName, rawName: name, size: size.trim(), price: price, img: img, category: category, note: note});
             
             if(noteInput) noteInput.value = '';
 
@@ -967,7 +976,7 @@
             
             const fly = document.createElement('div'); 
             fly.className = 'fly-item'; 
-            fly.innerHTML = '🍗'; 
+            fly.innerHTML = '🍕'; 
             fly.style.left = e.clientX + 'px'; 
             fly.style.top = e.clientY + 'px'; 
             document.body.appendChild(fly);
@@ -990,28 +999,49 @@
             }, 700);
         }
 
-        function checkOfferDiscount() {
-            const now = new Date();
-            const day = now.getDay(); 
-            const isOfferDay = (day === 6 || day === 0 || day === 1);
+        // التحقق من عرض البيتزا (اشتري أي 2 بيتزا من نفس الحجم واحصل على الثالثة هدية)
+        function evaluatePizzaOffer() {
+            earnedPizzaGifts = [];
+            const sizeCounts = {};
 
-            discountApplied = false;
-            discountVal = 0;
+            cart.forEach(item => {
+                const cat = (item.category || '').toLowerCase();
+                const name = (item.rawName || item.name || '').toLowerCase();
+                
+                // استثناء العروض الجاهزة من المنيو وحساب أصناف البيتزا فقط
+                const isOfferItem = cat.includes('عروض') || cat.includes('offer');
+                const isPizza = !isOfferItem && (cat.includes('بيتزا') || cat.includes('pizza') || name.includes('بيتزا') || name.includes('pizza'));
 
-            if (isOfferDay && subTotal >= 500) {
-                discountApplied = true;
-                discountVal = subTotal * 0.25;
+                if (isPizza) {
+                    const sz = item.size && item.size !== '' ? item.size : 'عادي';
+                    sizeCounts[sz] = (sizeCounts[sz] || 0) + 1;
+                }
+            });
+
+            const reminders = [];
+
+            for (const [size, count] of Object.entries(sizeCounts)) {
+                const freeCount = Math.floor(count / 2);
+                if (freeCount > 0) {
+                    earnedPizzaGifts.push({ size: size, count: freeCount });
+                }
+                // لو باقي بيتزا واحدة ليكمل اتنين من نفس الحجم
+                if (count % 2 === 1) {
+                    reminders.push(size);
+                }
             }
+
+            return { earnedPizzaGifts, reminders };
         }
 
         function updateCart() {
             const badge = document.getElementById('cartBadge'); 
             badge.innerText = cart.length; 
             badge.classList.toggle('show', cart.length > 0); 
-            subTotal = 0;
+            total = 0;
             
             document.getElementById('cartItemsList').innerHTML = cart.map((item, idx) => {
-                subTotal += parseFloat(item.price) || 0;
+                total += parseFloat(item.price) || 0;
                 return `
                 <div class="cart-item-card">
                     <img src="${item.img}" class="cart-item-img" onerror="this.src='${IMAGES_PATH}default.jpg'">
@@ -1024,45 +1054,38 @@
                 </div>`;
             }).join('');
             
-            checkOfferDiscount();
+            document.getElementById('totalAmount').innerText = `${total} ج.م`;
 
-            finalTotal = subTotal - discountVal;
-
-            document.getElementById('subTotalAmount').innerText = `${subTotal} ج.م`;
-            
-            const discountRow = document.getElementById('discountRow');
-            if (discountApplied) {
-                discountRow.style.display = 'flex';
-                document.getElementById('discountAmount').innerText = `-${discountVal.toFixed(1)} ج.م`;
-            } else {
-                discountRow.style.display = 'none';
-            }
-
-            document.getElementById('totalAmount').innerText = `${finalTotal.toFixed(1)} ج.م`;
-
+            const { earnedPizzaGifts, reminders } = evaluatePizzaOffer();
             const giftsContainer = document.getElementById('earnedGiftsContainer');
-            const now = new Date();
-            const day = now.getDay();
-            const isOfferDay = (day === 6 || day === 0 || day === 1);
+            let htmlOutput = '';
 
-            if (isOfferDay) {
-                if (discountApplied) {
-                    giftsContainer.innerHTML = `
-                        <div style="margin: 15px 0; padding: 12px; background: #e8f5e9; border-radius: 16px; border: 1px solid #c8e6c9; text-align: center;">
-                            <b style="color: #2e7d32; font-size: 0.9rem;">🎉 مبروك! تم تطبيق خصم 25% لطلبك بقيمة ${discountVal.toFixed(1)} ج.م.</b>
+            if (earnedPizzaGifts.length > 0) {
+                htmlOutput += earnedPizzaGifts.map(gift => `
+                    <div class="gift-card-box">
+                        <span style="font-size: 1.5rem;">🎁</span>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 900; color: #2e7d32; font-size: 0.9rem;">
+                                مبروك! كسبت ${gift.count} بيتزا هدية (حجم ${gift.size})
+                            </div>
+                            <div style="font-size: 0.76rem; color: var(--desc-text); font-weight: 700;">
+                                تقدر تكتب نوع البيتزا الهدية في الملاحظات أو مع الكاشير
+                            </div>
                         </div>
-                    `;
-                } else {
-                    const remaining = 500 - subTotal;
-                    giftsContainer.innerHTML = `
-                        <div style="margin: 15px 0; padding: 12px; background: #fff3cd; border-radius: 16px; border: 1px dashed #ffebaaa; text-align: center;">
-                            <b style="color: #856404; font-size: 0.85rem;">💡 أضف أصنافًا بقيمة ${remaining.toFixed(0)} ج.م أخرى للحصول على خصم 25%! (عرض السبت والأحد والإثنين)</b>
-                        </div>
-                    `;
-                }
-            } else {
-                giftsContainer.innerHTML = '';
+                        <span class="gift-badge">مجاناً 0 ج.م</span>
+                    </div>
+                `).join('');
             }
+
+            if (reminders.length > 0) {
+                htmlOutput += reminders.map(sz => `
+                    <div style="margin: 10px 0; padding: 10px 14px; background: #fff8e1; border-radius: 14px; border: 1px dashed #ffb300; text-align: center;">
+                        <b style="color: #8d6e00; font-size: 0.82rem;">💡 أضف 1 بيتزا (حجم ${sz}) أخرى للحصول على الثالثة هدية مجاناً!</b>
+                    </div>
+                `).join('');
+            }
+
+            giftsContainer.innerHTML = htmlOutput;
         }
 
         function removeFromCart(idx) { 
@@ -1138,13 +1161,14 @@
                 }
                 return line;
             }).join('\n') + `\n`;
+
+            if (earnedPizzaGifts.length > 0) {
+                msg += `\n🎁 *هدايا عرض البيتزا (2 + 1 مجاناً):*\n`;
+                msg += earnedPizzaGifts.map(g => `- عدد (${g.count}) بيتزا هدية مجاناً - حجم (${g.size})`).join('\n') + `\n`;
+            }
             
             msg += `-------------------------\n`;
-            msg += `💵 *المجموع قبل الخصم:* ${subTotal} ج.م\n`;
-            if (discountApplied) {
-                msg += `🔥 *خصم العرض (25%):* -${discountVal.toFixed(1)} ج.م\n`;
-            }
-            msg += `💰 *الإجمالي النهائي:* *${finalTotal.toFixed(1)} ج.م*\n\n`;
+            msg += `💰 *الإجمالي النهائي:* *${total} ج.م*\n\n`;
             msg += `نأمل أن تنال خدمتنا رضاكم دائماً. ✨`;
 
             window.open(`https://wa.me/201090969335?text=${encodeURIComponent(msg)}`);
@@ -1153,7 +1177,6 @@
         function initPWA() {
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('sw.js').then(reg => {
-                    // Force update service worker to clear old cache immediately
                     reg.update();
                     reg.addEventListener('updatefound', () => {
                         const newWorker = reg.installing;
